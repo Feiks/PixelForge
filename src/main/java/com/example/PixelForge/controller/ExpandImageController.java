@@ -1,33 +1,48 @@
 package com.example.PixelForge.controller;
 
+import com.example.PixelForge.service.CreditService;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/fal/reframe")
+@RequiredArgsConstructor
 public class ExpandImageController {
 
     @Value("${fal.api.key}")
     private String falApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final CreditService creditService;
 
     // Step 1: Submit Reframe Request
     @PostMapping("/submit")
-    public ResponseEntity<String> submitReframe(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> submitReframe(@RequestBody Map<String, String> body,
+                                           HttpServletRequest request) {
+        UUID userId = (UUID) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Missing userId");
+        }
+
         String imageUrl = body.get("image_url");
         String aspectRatio = body.getOrDefault("aspect_ratio", "16:9");
 
         if (imageUrl == null || imageUrl.isBlank()) {
             return ResponseEntity.badRequest().body("Missing 'image_url'");
         }
+
+        // ✅ Deduct credits
+        creditService.deductCredits(userId, "fal-ai/luma-photon/flash/reframe");
 
         String endpoint = "https://queue.fal.run/fal-ai/luma-photon/flash/reframe";
 
@@ -39,10 +54,10 @@ public class ExpandImageController {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Key " + falApiKey);
 
-        HttpEntity<String> request = new HttpEntity<>(payload.toString(), headers);
-        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, request, String.class);
+        HttpEntity<String> requestEntity = new HttpEntity<>(payload.toString(), headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, requestEntity, String.class);
 
-        return ResponseEntity.ok(response.getBody()); // contains request_id
+        return ResponseEntity.ok(response.getBody());
     }
 
     // Step 2: Check status

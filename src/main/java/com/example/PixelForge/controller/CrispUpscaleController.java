@@ -1,29 +1,45 @@
 package com.example.PixelForge.controller;
 
+import com.example.PixelForge.service.CreditService;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/fal/upscale/crisp")
+@RequiredArgsConstructor
 public class CrispUpscaleController {
 
     @Value("${fal.api.key}")
     private String falApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final CreditService creditService;
 
     @PostMapping("/submit")
-    public ResponseEntity<String> submit(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> submit(@RequestBody Map<String, Object> body,
+                                    HttpServletRequest request) {
+
+        UUID userId = (UUID) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Missing userId");
+        }
+
         String imageUrl = (String) body.get("image_url");
-        if (imageUrl == null) {
+        if (imageUrl == null || imageUrl.isBlank()) {
             return ResponseEntity.badRequest().body("Missing 'image_url'");
         }
+
+        // ✅ Deduct credits
+        creditService.deductCredits(userId, "fal-ai/recraft/upscale/crisp");
 
         JsonObject payload = new JsonObject();
         payload.addProperty("image_url", imageUrl);
@@ -34,8 +50,8 @@ public class CrispUpscaleController {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Key " + falApiKey);
 
-        HttpEntity<String> request = new HttpEntity<>(payload.toString(), headers);
-        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, request, String.class);
+        HttpEntity<String> requestEntity = new HttpEntity<>(payload.toString(), headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, requestEntity, String.class);
 
         return ResponseEntity.ok(response.getBody());
     }

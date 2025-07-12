@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -25,33 +26,31 @@ public class ImageGenerationService {
     private final int COST_PER_GENERATION = 1;
 
     @Transactional
-    public ImageJob createJob(String modelName, String inputImageUrl, String prompt, Long userId) {
+    public ImageJob createJob(String modelName, String inputImageUrl, String prompt, UUID userId) {
+        // 1. Fetch user and credits
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        Credit credit = creditRepository.findByUser(user)
+        Credit credit = creditRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Credit record not found"));
 
         if (credit.getBalance() < COST_PER_GENERATION) {
             throw new RuntimeException("Insufficient credits");
         }
 
-        // 1. Create ImageJob record (status: PENDING)
         ImageJob job = new ImageJob();
         job.setUser(user);
         job.setInputImageUrl(inputImageUrl);
         job.setModelName(modelName);
         job.setPrompt(prompt);
         job.setCreatedAt(LocalDateTime.now());
-        job.setStatus("PENDING");
+        job.setStatus(ImageJob.JobStatus.PROCESSING);
         imageJobRepository.save(job);
 
-        // 2. Trigger FAL
         String requestId = falClientService.sendToFal(modelName, inputImageUrl, prompt);
         job.setFalRequestId(requestId);
         imageJobRepository.save(job);
 
-        // 3. Deduct credits
         credit.setBalance(credit.getBalance() - COST_PER_GENERATION);
         creditRepository.save(credit);
 
@@ -66,7 +65,7 @@ public class ImageGenerationService {
                 if ("COMPLETED".equals(status)) {
                     String resultUrl = falClientService.getResultUrl(job.getFalRequestId());
                     job.setOutputImageUrl(resultUrl);
-                    job.setStatus("COMPLETED");
+                    job.setStatus(ImageJob.JobStatus.SUBMITTED);
                     job.setCompletedAt(LocalDateTime.now());
                     imageJobRepository.save(job);
                 }
@@ -75,10 +74,9 @@ public class ImageGenerationService {
         return jobOpt;
     }
 
-    public int getUserCreditBalance(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        Credit credit = creditRepository.findByUser(user)
+    public int getUserCreditBalance(UUID userId) {
+
+        Credit credit = creditRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Credit not found"));
         return credit.getBalance();
     }

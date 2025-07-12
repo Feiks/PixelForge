@@ -2,6 +2,7 @@ package com.example.PixelForge.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -13,9 +14,9 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @Table(name = "users")
-public class User {
+public class User  {
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, unique = true)
@@ -28,4 +29,5 @@ public class User {
     private String role = "USER";
 
     private LocalDateTime createdAt = LocalDateTime.now();
+
 }

@@ -4,12 +4,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 // ImageJob.java
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import lombok.Data;
 
+import java.time.LocalDateTime;
+@Data
 @Entity
 public class ImageJob {
 
@@ -24,6 +27,11 @@ public class ImageJob {
     private String prompt;
     private String imageUrl;
     private String resultUrl;
+    private String inputImageUrl;
+    private String modelName;
+    private String falRequestId;
+    private String outputImageUrl;
+    private LocalDateTime completedAt;
 
     @Enumerated(EnumType.STRING)
     private JobStatus status;

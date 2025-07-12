@@ -1,35 +1,50 @@
 package com.example.PixelForge.controller;
 
+import com.example.PixelForge.service.CreditService;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/fal/broccoli-haircut")
+@RequiredArgsConstructor
 public class BroccoliHaircutController {
 
     @Value("${fal.api.key}")
     private String falApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final CreditService creditService;
 
     @PostMapping("/submit")
-    public ResponseEntity<String> submit(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> submit(@RequestBody Map<String, Object> body,
+                                    HttpServletRequest request) {
+        UUID userId = (UUID) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Missing userId");
+        }
+
         String imageUrl = (String) body.get("image_url");
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return ResponseEntity.badRequest().body("Missing 'image_url'");
+        }
+
         Double guidanceScale = body.get("guidance_scale") != null ? (Double) body.get("guidance_scale") : 3.5;
         Integer steps = body.get("num_inference_steps") != null ? (Integer) body.get("num_inference_steps") : 30;
         Boolean enableSafetyChecker = body.get("enable_safety_checker") != null ? (Boolean) body.get("enable_safety_checker") : true;
         Double loraScale = body.get("lora_scale") != null ? (Double) body.get("lora_scale") : 1.0;
 
-        if (imageUrl == null) {
-            return ResponseEntity.badRequest().body("Missing 'image_url'");
-        }
+        // ✅ Deduct credits
+        creditService.deductCredits(userId, "fal-ai/image-editing/broccoli-haircut");
 
         JsonObject payload = new JsonObject();
         payload.addProperty("image_url", imageUrl);
@@ -44,8 +59,8 @@ public class BroccoliHaircutController {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Key " + falApiKey);
 
-        HttpEntity<String> request = new HttpEntity<>(payload.toString(), headers);
-        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, request, String.class);
+        HttpEntity<String> entity = new HttpEntity<>(payload.toString(), headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, entity, String.class);
 
         return ResponseEntity.ok(response.getBody());
     }

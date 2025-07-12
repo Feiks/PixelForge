@@ -1,27 +1,40 @@
 package com.example.PixelForge.controller;
 
+import com.example.PixelForge.service.CreditService;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
+import java.util.UUID;
 
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/fal/object-removal")
 public class ObjectRemovalController {
+
+    private final CreditService creditService;
 
     @Value("${fal.api.key}")
     private String falApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // Submit object removal request
     @PostMapping("/submit")
-    public ResponseEntity<String> submit(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> submit(@RequestBody Map<String, Object> body,
+                                    HttpServletRequest request) {
+        UUID userId = (UUID) request.getAttribute("userId");
+        System.out.println("userId in controller: " + userId); // ✅ confirm this
+
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Missing userId");
+        }
         String imageUrl = (String) body.get("image_url");
         String prompt = (String) body.get("prompt");
         String model = (String) body.getOrDefault("model", "best_quality");
@@ -30,6 +43,8 @@ public class ObjectRemovalController {
         if (imageUrl == null || prompt == null) {
             return ResponseEntity.badRequest().body("Missing 'image_url' or 'prompt'");
         }
+
+        creditService.deductCredits(userId, "fal-ai/object-removal");
 
         String endpoint = "https://queue.fal.run/fal-ai/object-removal";
 
@@ -43,10 +58,10 @@ public class ObjectRemovalController {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Key " + falApiKey);
 
-        HttpEntity<String> request = new HttpEntity<>(payload.toString(), headers);
-        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, request, String.class);
+        HttpEntity<String> request1 = new HttpEntity<>(payload.toString(), headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(endpoint, request1, String.class);
 
-        return ResponseEntity.ok(response.getBody()); // Contains request_id
+        return ResponseEntity.ok(response.getBody());
     }
 
     // Check status
